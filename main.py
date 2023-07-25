@@ -3,6 +3,7 @@ import time
 import subprocess
 import requests
 import pandas as pd
+import glob
 from time import sleep
 
 #PARAMS
@@ -12,9 +13,9 @@ SLEEP_SINGLE = 0.1  # pause between queries so that we do not flood server
 SLEEP_BATCH = 10 # sleep between batches of requests, not to floog server
 SLEEP_RESTART = 60 # sleep after restarting the server (if needed)
 BATCH_SIZE = 50  # store results every batch_size trips and give a break to a server
-RESTART_EVERY = 30 # restart after every batch
+RESTART_EVERY = 999999 # restart after every batch
 
-OTP_API = '"http://localhost:8080/otp/routers/default/plan"'
+OTP_API = "http://localhost:8080/otp/routers/default/plan"
 QUERY_MODES = "TRANSIT,WALK"
 MAX_WALK_DISTANCE = 2000
 
@@ -128,8 +129,8 @@ def query_dataset(PATH, OUTPATH, BATCHES_PATH = None):
 
 
 def main(start_server = True):
-    OTP_PATH = "otp-1.4.0-shaded.jar" # path to OTP executable
-    CITY_PATH = "data"  # folder with osm and gtfs files
+    OTP_PATH = "otp-2.3.0-shaded.jar" # path to OTP executable
+    CITY_PATH = "data"  # folder with osm, gtfs files and/or graph.obj
 
     PATH = 'georequests.csv'  # path with trips to query
     OUTPATH = PATH[:-4] + "_PT.csv"
@@ -137,6 +138,11 @@ def main(start_server = True):
     BATCHES_PATH = 'batches'  # path with trips to query
     if not os.path.exists(BATCHES_PATH):
         os.makedirs(BATCHES_PATH)
+    # else:
+        # files = glob.glob(os.path.join(BATCHES_PATH,'*'))
+        # for f in files:
+            # os.remove(f)
+    # remove all prevoius data from batches directory
 
 
     print('starting server')

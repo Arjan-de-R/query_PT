@@ -80,6 +80,7 @@ def merge_batches(path, out_path, remove=True):
 
     all_files = glob.glob(path + "/*.csv")
     df = pd.concat((pd.read_csv(f) for f in all_files), sort=False).set_index('id')
+    df = df.sort_values(by=['id'])
     df.to_csv(os.path.join(out_path))
     if remove:
         for f in all_files:
