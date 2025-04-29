@@ -63,8 +63,36 @@ def parse_OTP_response(response):
                 duration = dur
                 shortest = it
 
+        total_fare = 0
+        # Track combinations of operator and mode that we've seen
+        encountered_operator_modes = set()
         for leg in shortest['legs']:
-            modes.append([leg['mode'], int(leg['duration']), int(leg['distance'])])
+            mode = leg['mode']
+            leg_duration = int(leg['duration'])
+            leg_distance = int(leg['distance'])
+            
+            # Get operator if available (default to None if not present)
+            operator = leg.get('agencyId') or leg.get('agency') or leg.get('operator')
+            
+            # Combine operator and mode to create a unique key
+            operator_mode_key = f"{operator}_{mode}" if operator else mode
+            
+            # Check if this is a new operator-mode combination and if the mode has a base fare
+            if mode in mode_base_fares and operator_mode_key not in encountered_operator_modes:
+                encountered_operator_modes.add(operator_mode_key)
+                total_fare += mode_base_fares[mode]
+            
+            # Calculate distance-based fare for this leg
+            distance_km = leg_distance / 1000  # Assuming distance is in meters
+            price_per_km = mode_prices.get(mode, 0)  # Default to 0 if mode not found
+            leg_fare = price_per_km * distance_km
+            total_fare += leg_fare
+            
+            # Append leg information to modes list
+            modes.append([leg['mode'], leg_duration, leg_distance])
+    
+        # Round the fare to 2 decimal places
+        total_fare = round(total_fare, 2)
 
         ret = {'success': True,
                "n_itineraries": len(plan['itineraries']),
@@ -73,6 +101,7 @@ def parse_OTP_response(response):
                'transfers': shortest['transfers'],
                'transitTime': shortest['transitTime'],
                'waitingTime': shortest['waitingTime'],
+               'fare': total_fare,
                'modes': modes}
     else:
         ret = {'success': False}
@@ -91,13 +120,14 @@ def query_dataset(PATH, OUTPATH, BATCHES_PATH = None):
     print('trips to process ', df.shape[0])
 
     # loop over batches
-    for batch in range((max(BATCH_SIZE, df.shape[0]) // BATCH_SIZE)):
-        batch_df = df.iloc[BATCH_SIZE * batch:BATCH_SIZE * (batch + 1)]  # process this batch only
-        print(BATCH_SIZE * batch,BATCH_SIZE * (batch + 1))
+    for batch in range(((max(BATCH_SIZE, df.shape[0]) - 1) // BATCH_SIZE + 1)):
+        end_batch_idx = BATCH_SIZE * (batch + 1) if (BATCH_SIZE * (batch + 1)) <= df.shape[0] else df.shape[0]
+        batch_df = df.iloc[BATCH_SIZE * batch:end_batch_idx]  # process this batch only
+        print(BATCH_SIZE * batch,end_batch_idx)
         queries = batch_df.apply(make_query, axis=1)  # make OTP query for each trip in dataset
 
         ret_list = list()
-        for id, query in queries.iteritems():
+        for id, query in queries.items():
             try:
                 r = requests.get(OTP_API, params=query)
                 ret = parse_OTP_response(r.json())
@@ -177,7 +207,7 @@ def test_server(dataset_path):
     print('test server on 5 sample trips')
 
     ret_dict = list()
-    for id, query in queries.iteritems():
+    for id, query in queries.items():
         try:
             r = requests.get(OTP_API, params=query)
             ret = parse_OTP_response(r.json())
@@ -192,5 +222,26 @@ def test_server(dataset_path):
 
 
 if __name__ == "__main__":
-    main(start_server=False)
 
+    # Define prices per kilometer for different modes
+    mode_prices = {
+        'BUS': 0.20, 
+        'SUBWAY': 0.20, 
+        'RAIL': 0.12, 
+        'WALK': 0.00, 
+        'BICYCLE': 0.00,  
+        'TRAM': 0.20,
+        'FERRY': 0.15, 
+    }
+
+    # Define base fares for different modes
+    mode_base_fares = {
+        'BUS': 1.0,       # €1.00 base fare
+        'SUBWAY': 1.0,    # €1.00 base fare
+        'RAIL': 3.0,      # €3.00 base fare
+        'TRAM': 1.0,      # €1.00 base fare
+        'FERRY': 1.5      # €1.50 base fare
+        # Walking and cycling typically don't have base fares
+    }
+
+    main(start_server=False)
